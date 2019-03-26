@@ -21,30 +21,30 @@ open class Client: NSObject {
     let host: URL
     let applicationId: String
     let clientKey: String?
-
+    
     var socket: WebSocket?
-    public var shouldPrintWebSocketLog = true
-    public var shouldPrintWebSocketTrace = false
-    public var userDisconnected = false
+    @objc public var shouldPrintWebSocketLog = true
+    @objc public var shouldPrintWebSocketTrace = false
+    @objc public var userDisconnected = false
     var isConnecting = false
-
+    
     // This allows us to easily plug in another request ID generation scheme, or more easily change the request id type
     // if needed (technically this could be a string).
     let requestIdGenerator: () -> RequestId
     var subscriptions = [SubscriptionRecord]()
-
+    
     let queue = DispatchQueue(label: "com.parse.livequery", attributes: [])
-
+    
     /**
      Creates a Client which automatically attempts to connect to the custom parse-server URL set in Parse.currentConfiguration().
      */
     public override convenience init() {
         self.init(server: Parse.validatedCurrentConfiguration().server)
     }
-
+    
     /**
      Creates a client which will connect to a specific server with an optional application id and client key
-
+     
      - parameter server:        The server to connect to
      - parameter applicationId: The application id to use
      - parameter clientKey:     The client key to use
@@ -55,17 +55,17 @@ open class Client: NSObject {
         }
         var components = cmpts
         components.scheme = (components.scheme == "https" || components.scheme == "wss") ? "wss" : "ws"
-
+        
         // Simple incrementing generator - can't use ++, that operator is deprecated!
         var currentRequestId = 0
         requestIdGenerator = {
             currentRequestId += 1
             return RequestId(value: currentRequestId)
         }
-
+        
         self.applicationId = applicationId ?? Parse.validatedCurrentConfiguration().applicationId!
         self.clientKey = clientKey ?? Parse.validatedCurrentConfiguration().clientKey
-
+        
         self.host = components.url!
     }
 }
@@ -75,19 +75,19 @@ extension Client {
     // So we create an inner struct to wrap it up.
     fileprivate class Storage {
         private static var __once: () = {
-                sharedStorage = Storage()
-            }()
+            sharedStorage = Storage()
+        }()
         static var onceToken: Int = 0
         static var sharedStorage: Storage!
         static var shared: Storage {
             _ = Storage.__once
             return sharedStorage
         }
-
+        
         let queue: DispatchQueue = DispatchQueue(label: "com.parse.livequery.client.storage", attributes: [])
         var client: Client?
     }
-
+    
     /// Gets or sets shared live query client to be used for default subscriptions
     @objc(sharedClient)
     public static var shared: Client! {
@@ -120,11 +120,11 @@ extension Client {
 extension Client {
     /**
      Registers a query for live updates, using the default subscription handler
-
+     
      - parameter query:        The query to register for updates.
      - parameter subclassType: The subclass of PFObject to be used as the type of the Subscription.
      This parameter can be automatically inferred from context most of the time
-
+     
      - returns: The subscription that has just been registered
      */
     public func subscribe<T>(
@@ -133,15 +133,15 @@ extension Client {
         ) -> Subscription<T> {
         return subscribe(query, handler: Subscription<T>())
     }
-
+    
     /**
      Registers a query for live updates, using a custom subscription handler
-
+     
      - parameter query:   The query to register for updates.
      - parameter handler: A custom subscription handler.
-
+     
      - returns: Your subscription handler, for easy chaining.
-    */
+     */
     public func subscribe<T>(
         _ query: PFQuery<T.PFObjectSubclass>,
         handler: T
@@ -152,10 +152,10 @@ extension Client {
             handler: handler
         )
         subscriptions.append(subscriptionRecord)
-
+        
         if let socket = socket, socket.isConnected == true {
             _ = sendOperationAsync(.subscribe(requestId: subscriptionRecord.requestId, query: query as! PFQuery<PFObject>,
-            sessionToken: PFUser.current()?.sessionToken))
+                                              sessionToken: PFUser.current()?.sessionToken))
         } else {
             if !userDisconnected {
                 reconnect()
@@ -166,11 +166,11 @@ extension Client {
         
         return handler
     }
-
+    
     /**
      Updates an existing subscription with a new query.
      Upon completing the registration, the subscribe handler will be called with the new query
-
+     
      - parameter handler: The specific handler to update.
      - parameter query:   The new query for that handler.
      */
@@ -186,27 +186,27 @@ extension Client {
             return $0
         }
     }
-
+    
     /**
      Unsubscribes all current subscriptions for a given query.
-
+     
      - parameter query: The query to unsubscribe from.
      */
     @objc(unsubscribeFromQuery:)
     public func unsubscribe(_ query: PFQuery<PFObject>) {
         unsubscribe { $0.query == query }
     }
-
+    
     /**
      Unsubscribes from a specific query-handler pair.
-
+     
      - parameter query:   The query to unsubscribe from.
      - parameter handler: The specific handler to unsubscribe from.
      */
     public func unsubscribe<T>(_ query: PFQuery<T.PFObjectSubclass>, handler: T) where T: SubscriptionHandling {
         unsubscribe { $0.query == query && $0.subscriptionHandler === handler }
     }
-
+    
     func unsubscribe(matching matcher: @escaping (SubscriptionRecord) -> Bool) {
         var temp = [SubscriptionRecord]()
         subscriptions.forEach {
@@ -223,11 +223,11 @@ extension Client {
 extension Client {
     /**
      Reconnects this client to the server.
-
+     
      This will disconnect and resubscribe all existing subscriptions. This is not required to be called the first time
      you use the client, and should usually only be called when an error occurs.
      */
-    public func reconnect() {
+    @objc public func reconnect() {
         guard socket == nil || !isConnecting else { return }
         socket?.disconnect()
         socket = {
@@ -240,14 +240,14 @@ extension Client {
             return socket
         }()
     }
-
+    
     /**
      Explicitly disconnects this client from the server.
-
+     
      This does not remove any subscriptions - if you `reconnect()` your existing subscriptions will be restored.
      Use this if you wish to dispose of the live query client.
      */
-    public func disconnect() {
+    @objc public func disconnect() {
         isConnecting = false
         guard let socket = socket
             else {
